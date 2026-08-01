@@ -1,0 +1,39 @@
+name: Build APK
+
+# Runs automatically on every push to main, and lets you trigger it manually
+# from the Actions tab too. No local Android Studio or admin rights needed --
+# GitHub's own servers do the building. Uses gradle/actions/setup-gradle,
+# which provides a working `gradle` command directly, so this repo doesn't
+# need to carry the gradlew wrapper jar.
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the project
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        run: gradle assembleDebug
+
+      - name: Upload APK as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-calendar-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk

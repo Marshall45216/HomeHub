@@ -71,11 +71,20 @@ class WeatherRepository {
      * "Bradenton, Florida") and returns the matched place name plus its
      * forecast. Throws CityNotFoundException if nothing matches.
      */
-    suspend fun getWeekForecastForCity(cityQuery: String): Pair<String, List<DayForecast>> {
-        val geo = geocodingApi.search(cityQuery)
-        val match = geo.results?.firstOrNull() ?: throw CityNotFoundException(cityQuery)
-        val label = if (match.admin1 != null) "${match.name}, ${match.admin1}" else match.name
-        return label to getWeekForecast(match.latitude, match.longitude)
+   suspend fun getWeekForecast(lat: Double, lon: Double): List<DayForecast> {
+        val resp = api.getWeeklyForecast(lat, lon)
+        val dayFmt = java.time.format.DateTimeFormatter.ofPattern("EEE", Locale.US)
+
+        return resp.daily.time.indices.map { i ->
+            val date = java.time.LocalDate.parse(resp.daily.time[i])
+            DayForecast(
+                date = date,
+                dayLabel = if (i == 0) "Today" else date.format(dayFmt),
+                highF = resp.daily.tempMax[i].toInt(),
+                lowF = resp.daily.tempMin[i].toInt(),
+                condition = mapWeatherCode(resp.daily.weatherCode[i])
+            )
+        }
     }
 
     /** Pass exact lat/lon directly if you already have them. */

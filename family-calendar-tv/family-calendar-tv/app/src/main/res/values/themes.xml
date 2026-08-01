@@ -1,9 +1,0 @@
-<resources>
-    <!-- Manifest references this; Compose applies FamilyCalendarTheme at
-         runtime, so this base theme just needs to be a plain no-action-bar
-         theme to avoid a flash of an unstyled system theme on launch. -->
-    <style name="Theme.FamilyCalendarTV" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@android:color/black</item>
-        <item name="android:colorBackground">@android:color/black</item>
-    </style>
-</resources>

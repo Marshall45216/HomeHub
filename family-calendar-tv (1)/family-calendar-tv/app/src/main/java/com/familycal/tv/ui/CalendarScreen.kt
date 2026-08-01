@@ -3,6 +3,8 @@ package com.familycal.tv.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -13,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
@@ -24,6 +27,31 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 enum class HeroRange { TODAY, WEEK, MONTH }
+
+/**
+ * Every interactive element on this screen goes through this instead of a
+ * plain Modifier.clickable. Two reasons:
+ *  1. clickable()'s default indication only really shows up on press --
+ *     on a TV remote you need a clear "this is what's currently focused"
+ *     state as the D-pad moves BEFORE you press select.
+ *  2. It gives every clickable element the same strong, consistent look:
+ *     a bright border + light fill while focused.
+ */
+@Composable
+fun Modifier.tvFocusable(shape: Shape, onClick: () -> Unit): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+    return this
+        .clip(shape)
+        .then(
+            if (isFocused)
+                Modifier
+                    .background(HubAccent.copy(alpha = 0.30f))
+                    .border(width = 3.dp, color = Color.White, shape = shape)
+            else Modifier
+        )
+        .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+}
 
 @Composable
 fun CalendarScreen(
@@ -38,13 +66,16 @@ fun CalendarScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(HubBackground)
-            .padding(horizontal = 40.dp, vertical = 28.dp)
+            .padding(horizontal = 36.dp, vertical = 20.dp)
     ) {
         TopBar(appState = appState, today = today, onNavigate = onNavigate)
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(14.dp))
 
-        Row(modifier = Modifier.weight(1f, fill = false)) {
-            Box(modifier = Modifier.weight(0.62f)) {
+        // The hero/events + family/countdown row gets ALL the leftover
+        // vertical space -- weather and the voice bar are deliberately
+        // kept compact below so this row never gets starved and clipped.
+        Row(modifier = Modifier.weight(1f, fill = true)) {
+            Box(modifier = Modifier.weight(0.68f)) {
                 TodayHeroPanel(
                     appState = appState, today = today, range = heroRange,
                     onRangeSelected = { r ->
@@ -58,18 +89,18 @@ fun CalendarScreen(
                     onEventClick = { onNavigate(Screen.EventDetail(it)) }
                 )
             }
-            Spacer(Modifier.width(20.dp))
-            Column(modifier = Modifier.weight(0.38f)) {
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(0.32f)) {
                 FamilyRow(appState = appState, onNavigate = onNavigate)
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
                 CountdownGrid(appState = appState, today = today, onNavigate = onNavigate)
             }
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(12.dp))
         WeatherWeekStrip(forecast)
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(12.dp))
         VoiceQuickAddBar(onMicPressed = { onNavigate(Screen.AddEditEvent()) })
     }
 }
@@ -92,10 +123,10 @@ private fun TopBar(appState: AppState, today: LocalDate, onNavigate: (Screen) ->
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(HubAccent),
+                modifier = Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(HubAccent),
                 contentAlignment = Alignment.Center
             ) { Text("H", style = FamilyCalTypography.titleLarge) }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
             Column {
                 Text("HomeHub", style = FamilyCalTypography.titleLarge)
                 Text("Smart Family Planner", style = FamilyCalTypography.bodyMedium)
@@ -110,14 +141,20 @@ private fun TopBar(appState: AppState, today: LocalDate, onNavigate: (Screen) ->
                 Spacer(Modifier.width(8.dp))
                 TopBarButton("Grocery List") { onNavigate(Screen.GroceryList) }
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
             Text(caption, style = FamilyCalTypography.bodyMedium)
-            Spacer(Modifier.height(4.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Spacer(Modifier.height(2.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 items((0..6).toList()) { i ->
                     val date = weekStart.plusDays(i.toLong())
                     val meal = appState.mealFor(date)
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { onNavigate(Screen.MealsWeek) }) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .padding(4.dp)
+                            .tvFocusable(RoundedCornerShape(8.dp)) { onNavigate(Screen.MealsWeek) }
+                            .padding(6.dp)
+                    ) {
                         Text(
                             "${date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.US)} ${date.dayOfMonth}",
                             style = FamilyCalTypography.bodyMedium
@@ -134,9 +171,8 @@ private fun TopBar(appState: AppState, today: LocalDate, onNavigate: (Screen) ->
 private fun TopBarButton(label: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
             .border(width = 1.dp, color = HubDivider, shape = RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick)
+            .tvFocusable(RoundedCornerShape(20.dp), onClick)
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) { Text(label, style = FamilyCalTypography.bodyMedium) }
 }
@@ -147,12 +183,12 @@ private fun TodayHeroPanel(
     onRangeSelected: (HeroRange) -> Unit, onAddEvent: () -> Unit, onEventClick: (Long) -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(HeroGradient).padding(28.dp)
+        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(24.dp)).background(HeroGradient).padding(24.dp)
     ) {
         Text(today.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.US).uppercase(), style = FamilyCalTypography.bodyMedium, color = Color(0xFFCBD3FF))
         Text(today.month.getDisplayName(TextStyle.FULL, Locale.US) + " " + today.dayOfMonth, style = FamilyCalTypography.displayLarge)
 
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 18.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(
                 when (range) { HeroRange.TODAY -> "Today"; HeroRange.WEEK -> "This Week"; HeroRange.MONTH -> "This Month" },
                 style = FamilyCalTypography.headlineLarge, color = Color(0xFFB9C2FF)
@@ -170,17 +206,16 @@ private fun TodayHeroPanel(
         if (todaysEvents.isEmpty()) {
             Text("Nothing on the calendar today", color = Color(0xFFCBD3FF))
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 todaysEvents.forEach { ev -> HeroEventRow(ev, onClick = { onEventClick(ev.id) }) }
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.weight(1f))
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
                 .background(Color.White.copy(alpha = 0.15f))
-                .clickable(onClick = onAddEvent)
+                .tvFocusable(RoundedCornerShape(10.dp), onAddEvent)
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) { Text("+ Add Event", style = FamilyCalTypography.bodyLarge) }
     }
@@ -190,9 +225,8 @@ private fun TodayHeroPanel(
 private fun RangePill(label: String, active: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
             .background(if (active) Color.White else Color.White.copy(alpha = 0.1f))
-            .clickable(onClick = onClick)
+            .tvFocusable(RoundedCornerShape(20.dp), onClick)
             .padding(horizontal = 12.dp, vertical = 5.dp)
     ) {
         Text(label, style = FamilyCalTypography.bodyMedium, color = if (active) Color(0xFF2B3E8C) else Color.White)
@@ -201,10 +235,13 @@ private fun RangePill(label: String, active: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun HeroEventRow(event: FamilyEvent, onClick: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().tvFocusable(RoundedCornerShape(12.dp), onClick).padding(6.dp)
+    ) {
         val (emoji, color) = categoryVisual(event.category)
-        Box(modifier = Modifier.size(48.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) { Text(emoji) }
-        Spacer(Modifier.width(16.dp))
+        Box(modifier = Modifier.size(44.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) { Text(emoji) }
+        Spacer(Modifier.width(14.dp))
         Column {
             Text(if (event.isAllDay) "All day" else event.time ?: "", style = FamilyCalTypography.bodyMedium, color = Color(0xFFCBD3FF))
             Text(event.title, style = FamilyCalTypography.titleLarge)
@@ -216,20 +253,26 @@ private fun HeroEventRow(event: FamilyEvent, onClick: () -> Unit) {
 private fun FamilyRow(appState: AppState, onNavigate: (Screen) -> Unit) {
     Text("FAMILY", style = FamilyCalTypography.bodyMedium)
     Spacer(Modifier.height(6.dp))
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         items(appState.family) { person ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { onNavigate(Screen.PersonProfile(person.displayName)) }) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(2.dp).tvFocusable(RoundedCornerShape(16.dp)) { onNavigate(Screen.PersonProfile(person.displayName)) }.padding(4.dp)
+            ) {
                 Box(
-                    modifier = Modifier.size(56.dp).clip(CircleShape).background(HubSurfaceRaised).border(2.dp, person.color, CircleShape),
+                    modifier = Modifier.size(52.dp).clip(CircleShape).background(HubSurfaceRaised).border(2.dp, person.color, CircleShape),
                     contentAlignment = Alignment.Center
                 ) { Text(person.displayName.take(1), style = FamilyCalTypography.titleLarge) }
                 Text(person.displayName, style = FamilyCalTypography.bodyMedium)
             }
         }
         item {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { onNavigate(Screen.EditProfile()) }) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(2.dp).tvFocusable(RoundedCornerShape(16.dp)) { onNavigate(Screen.EditProfile()) }.padding(4.dp)
+            ) {
                 Box(
-                    modifier = Modifier.size(56.dp).clip(CircleShape).border(1.dp, HubDivider, CircleShape),
+                    modifier = Modifier.size(52.dp).clip(CircleShape).border(1.dp, HubDivider, CircleShape),
                     contentAlignment = Alignment.Center
                 ) { Text("+", style = FamilyCalTypography.headlineLarge, color = HubTextSecondary) }
                 Text("Add", style = FamilyCalTypography.bodyMedium)
@@ -242,12 +285,12 @@ private fun FamilyRow(appState: AppState, onNavigate: (Screen) -> Unit) {
 private fun CountdownGrid(appState: AppState, today: LocalDate, onNavigate: (Screen) -> Unit) {
     Text("COUNTDOWNS", style = FamilyCalTypography.bodyMedium)
     Spacer(Modifier.height(6.dp))
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         appState.countdowns.chunked(2).forEachIndexed { rowIdx, row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 row.forEachIndexed { colIdx, item ->
                     val index = rowIdx * 2 + colIdx
-                    CountdownCard(item, today, Modifier.weight(1f).clickable { onNavigate(Screen.CountdownDetail(index)) })
+                    CountdownCard(item, today, Modifier.weight(1f)) { onNavigate(Screen.CountdownDetail(index)) }
                 }
                 if (row.size == 1) Spacer(Modifier.weight(1f))
             }
@@ -256,27 +299,32 @@ private fun CountdownGrid(appState: AppState, today: LocalDate, onNavigate: (Scr
 }
 
 @Composable
-private fun CountdownCard(item: CountdownItem, today: LocalDate, modifier: Modifier = Modifier) {
+private fun CountdownCard(item: CountdownItem, today: LocalDate, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val (_, color) = categoryVisual(item.category)
     val effectiveDate = item.effectiveDate(today)
     val days = java.time.temporal.ChronoUnit.DAYS.between(today, effectiveDate).toInt()
-    Column(modifier = modifier.clip(RoundedCornerShape(18.dp)).background(color.copy(alpha = 0.22f)).padding(16.dp)) {
+    Column(
+        modifier = modifier
+            .background(color.copy(alpha = 0.22f))
+            .tvFocusable(RoundedCornerShape(18.dp), onClick)
+            .padding(14.dp)
+    ) {
         Text(item.label, style = FamilyCalTypography.bodyMedium)
-        Text(if (days <= 0) "Today" else "$days", style = FamilyCalTypography.displayLarge, color = color)
+        Text(if (days <= 0) "Today" else "$days", style = FamilyCalTypography.headlineLarge, color = color)
         if (days > 0) Text("days", style = FamilyCalTypography.bodyMedium)
     }
 }
 
 @Composable
 private fun WeatherWeekStrip(forecast: List<DayForecast>) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         items(forecast) { f ->
-            Column(modifier = Modifier.width(150.dp).clip(RoundedCornerShape(16.dp)).background(HubSurfaceRaised).padding(14.dp)) {
-                Text(f.dayLabel, style = FamilyCalTypography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(8.dp))
-                Text(weatherEmoji(f.condition), style = FamilyCalTypography.headlineLarge)
-                Spacer(Modifier.height(8.dp))
-                Row { Text("${f.highF}\u00B0", style = FamilyCalTypography.bodyLarge); Spacer(Modifier.width(8.dp)); Text("${f.lowF}\u00B0", style = FamilyCalTypography.bodyMedium) }
+            Column(modifier = Modifier.width(104.dp).clip(RoundedCornerShape(14.dp)).background(HubSurfaceRaised).padding(10.dp)) {
+                Text(f.dayLabel, style = FamilyCalTypography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                Text(weatherEmoji(f.condition), style = FamilyCalTypography.bodyLarge)
+                Spacer(Modifier.height(4.dp))
+                Row { Text("${f.highF}\u00B0", style = FamilyCalTypography.bodyMedium); Spacer(Modifier.width(6.dp)); Text("${f.lowF}\u00B0", style = FamilyCalTypography.bodyMedium, color = HubTextSecondary) }
             }
         }
     }
@@ -285,12 +333,16 @@ private fun WeatherWeekStrip(forecast: List<DayForecast>) {
 @Composable
 private fun VoiceQuickAddBar(onMicPressed: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(HubSurface).padding(horizontal = 20.dp, vertical = 16.dp).clickable(onClick = onMicPressed),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(HubSurface)
+            .tvFocusable(RoundedCornerShape(20.dp), onMicPressed)
+            .padding(horizontal = 18.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.size(44.dp).clip(CircleShape).background(HubAccent), contentAlignment = Alignment.Center) { Text("\uD83C\uDF99\uFE0F") }
-        Spacer(Modifier.width(16.dp))
-        Text("Hold the mic button and say \u201CAdd soccer practice Saturday 10am for Emma\u201D", style = FamilyCalTypography.bodyLarge, modifier = Modifier.weight(1f))
+        Box(modifier = Modifier.size(38.dp).clip(CircleShape).background(HubAccent), contentAlignment = Alignment.Center) { Text("\uD83C\uDF99\uFE0F") }
+        Spacer(Modifier.width(14.dp))
+        Text("Hold the mic button and say \u201CAdd soccer practice Saturday 10am for Emma\u201D", style = FamilyCalTypography.bodyMedium, modifier = Modifier.weight(1f))
     }
 }
 
@@ -313,3 +365,4 @@ fun weatherEmoji(condition: String): String = when (condition.lowercase()) {
     "snow" -> "\u2744\uFE0F"
     else -> "\u26C5"
 }
+

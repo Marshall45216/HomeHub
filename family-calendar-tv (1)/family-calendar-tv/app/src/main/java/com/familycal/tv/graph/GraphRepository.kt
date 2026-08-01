@@ -18,8 +18,6 @@ import java.text.SimpleDateFormat
 import java.time.Instant
 import java.util.*
 
-// --- Raw Graph API response shapes -----------------------------------------
-
 data class GraphCalendarViewResponse(
     @SerializedName("value") val events: List<GraphEvent>
 )
@@ -37,8 +35,6 @@ data class GraphDateTime(val dateTime: String, val timeZone: String)
 data class GraphLocation(val displayName: String?)
 
 interface GraphApi {
-    // calendarView expands recurring events into individual instances,
-    // which is what you want for a "what's happening this week" display.
     @GET("me/calendarView")
     suspend fun getCalendarView(
         @Header("Authorization") bearerToken: String,
@@ -62,10 +58,6 @@ data class NewGraphEvent(
     val location: GraphLocation? = null
 )
 
-/**
- * Fetches each signed-in family member's calendar in parallel and merges
- * them into one sorted, color-tagged list for the combined TV view.
- */
 class GraphRepository {
 
     private val api: GraphApi = Retrofit.Builder()
@@ -79,10 +71,6 @@ class GraphRepository {
         .build()
         .create(GraphApi::class.java)
 
-    /**
-     * [members] maps each FamilyMember to their current access token.
-     * Fetches all calendars concurrently, then merges + sorts by start time.
-     */
     suspend fun getCombinedFamilyEvents(
         members: Map<FamilyMember, String>,
         rangeStart: Date,
@@ -101,25 +89,28 @@ class GraphRepository {
                         end = endStr
                     ).events.map { it.toFamilyEvent(member) }
                 }.getOrElse {
-                    // One family member's token expiring/failing shouldn't blank
-                    // the whole screen -- just skip their events for this refresh.
                     emptyList()
                 }
             }
         }
 
-        deferredPerMember.awaitAll().flatten().sortedBy { it.startEpochMillis }
+        deferredPerMember.awaitAll().flatten().sortedBy { it.date }
     }
 
-    private fun GraphEvent.toFamilyEvent(owner: FamilyMember) = FamilyEvent(
-        id = id,
-        subject = subject,
-        startEpochMillis = Instant.parse(start.dateTime + "Z").toEpochMilli(),
-        endEpochMillis = Instant.parse(end.dateTime + "Z").toEpochMilli(),
-        isAllDay = isAllDay,
-        location = location?.displayName,
-        owner = owner
-    )
+    private fun GraphEvent.toFamilyEvent(owner: FamilyMember): FamilyEvent {
+        val startInstant = Instant.parse(start.dateTime + "Z")
+        val zonedStart = startInstant.atZone(java.time.ZoneId.systemDefault())
+        return FamilyEvent(
+            id = id.hashCode().toLong(),
+            title = subject,
+            date = zonedStart.toLocalDate(),
+            isAllDay = isAllDay,
+            time = if (isAllDay) null else zonedStart.toLocalTime()
+                .format(java.time.format.DateTimeFormatter.ofPattern("h:mm a")),
+            location = location?.displayName ?: "",
+            people = listOf(owner.displayName)
+        )
+    }
 
     private fun isoFormatter(): SimpleDateFormat =
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {

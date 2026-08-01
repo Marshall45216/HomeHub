@@ -63,21 +63,22 @@ class AuthManager(context: Context) {
     }
 
     /** Silently refreshes a token for an already-signed-in account. Call before each Graph API batch. */
-    suspend fun getFreshToken(account: IAccount, scopes: List<String>): String =
+      suspend fun getFreshToken(account: IAccount, scopes: List<String>): String =
         suspendCancellableCoroutine { cont ->
-            app.acquireTokenSilentAsync(
-                scopes.toTypedArray(),
-                account,
-                (app as? IMultipleAccountPublicClientApplication)?.let { null },
-                object : SilentAuthenticationCallback {
+            val parameters = AcquireTokenSilentParameters.Builder()
+                .withScopes(scopes)
+                .forAccount(account)
+                .fromAuthority(account.authority)
+                .withCallback(object : SilentAuthenticationCallback {
                     override fun onSuccess(authenticationResult: IAuthenticationResult) {
                         cont.resume(authenticationResult.accessToken)
                     }
                     override fun onError(exception: MsalException) {
                         cont.resumeWithException(exception)
                     }
-                }
-            )
+                })
+                .build()
+            app.acquireTokenSilentAsync(parameters)
         }
 
     fun getSignedInAccounts(): List<IAccount> =

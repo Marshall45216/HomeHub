@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -90,18 +91,17 @@ fun CalendarScreen(
                 )
             }
             Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(0.32f)) {
+            Column(modifier = Modifier.weight(0.32f).fillMaxHeight()) {
                 FamilyRow(appState = appState, onNavigate = onNavigate)
-                Spacer(Modifier.height(12.dp))
-                CountdownGrid(appState = appState, today = today, onNavigate = onNavigate)
+                Spacer(Modifier.height(10.dp))
+                Box(modifier = Modifier.weight(1f)) {
+                    CountdownGrid(appState = appState, today = today, onNavigate = onNavigate)
+                }
             }
         }
 
         Spacer(Modifier.height(12.dp))
         WeatherWeekStrip(forecast)
-
-        Spacer(Modifier.height(12.dp))
-        VoiceQuickAddBar(onMicPressed = { onNavigate(Screen.AddEditEvent()) })
     }
 }
 
@@ -183,15 +183,16 @@ private fun TodayHeroPanel(
     onRangeSelected: (HeroRange) -> Unit, onAddEvent: () -> Unit, onEventClick: (Long) -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(24.dp)).background(HeroGradient).padding(24.dp)
+        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(24.dp)).background(HeroGradient).padding(20.dp)
     ) {
+        // Fixed-height header -- always visible regardless of how much room is left.
         Text(today.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.US).uppercase(), style = FamilyCalTypography.bodyMedium, color = Color(0xFFCBD3FF))
-        Text(today.month.getDisplayName(TextStyle.FULL, Locale.US) + " " + today.dayOfMonth, style = FamilyCalTypography.displayLarge)
+        Text(today.month.getDisplayName(TextStyle.SHORT, Locale.US) + " " + today.dayOfMonth, style = FamilyCalTypography.headlineLarge)
 
-        Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(
                 when (range) { HeroRange.TODAY -> "Today"; HeroRange.WEEK -> "This Week"; HeroRange.MONTH -> "This Month" },
-                style = FamilyCalTypography.headlineLarge, color = Color(0xFFB9C2FF)
+                style = FamilyCalTypography.titleLarge, color = Color(0xFFB9C2FF)
             )
             Row {
                 RangePill("Today", range == HeroRange.TODAY) { onRangeSelected(HeroRange.TODAY) }
@@ -202,22 +203,26 @@ private fun TodayHeroPanel(
             }
         }
 
+        // Events area gets exactly whatever room is left between the header
+        // above and the Add button below -- and SCROLLS internally if there
+        // are more events than fit, instead of the excess just disappearing.
         val todaysEvents = appState.eventsOn(today)
-        if (todaysEvents.isEmpty()) {
-            Text("Nothing on the calendar today", color = Color(0xFFCBD3FF))
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                todaysEvents.forEach { ev -> HeroEventRow(ev, onClick = { onEventClick(ev.id) }) }
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (todaysEvents.isEmpty()) {
+                Text("Nothing on the calendar today", color = Color(0xFFCBD3FF))
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    items(todaysEvents) { ev -> HeroEventRow(ev, onClick = { onEventClick(ev.id) }) }
+                }
             }
         }
 
-        Spacer(Modifier.weight(1f))
         Box(
             modifier = Modifier
                 .background(Color.White.copy(alpha = 0.15f))
                 .tvFocusable(RoundedCornerShape(10.dp), onAddEvent)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) { Text("+ Add Event", style = FamilyCalTypography.bodyLarge) }
+                .padding(horizontal = 14.dp, vertical = 6.dp)
+        ) { Text("+ Add Event", style = FamilyCalTypography.bodyMedium) }
     }
 }
 
@@ -237,14 +242,14 @@ private fun RangePill(label: String, active: Boolean, onClick: () -> Unit) {
 private fun HeroEventRow(event: FamilyEvent, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().tvFocusable(RoundedCornerShape(12.dp), onClick).padding(6.dp)
+        modifier = Modifier.fillMaxWidth().tvFocusable(RoundedCornerShape(12.dp), onClick).padding(4.dp)
     ) {
         val (emoji, color) = categoryVisual(event.category)
-        Box(modifier = Modifier.size(44.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) { Text(emoji) }
-        Spacer(Modifier.width(14.dp))
+        Box(modifier = Modifier.size(34.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) { Text(emoji, style = FamilyCalTypography.bodyMedium) }
+        Spacer(Modifier.width(10.dp))
         Column {
             Text(if (event.isAllDay) "All day" else event.time ?: "", style = FamilyCalTypography.bodyMedium, color = Color(0xFFCBD3FF))
-            Text(event.title, style = FamilyCalTypography.titleLarge)
+            Text(event.title, style = FamilyCalTypography.bodyLarge)
         }
     }
 }
@@ -306,43 +311,27 @@ private fun CountdownCard(item: CountdownItem, today: LocalDate, modifier: Modif
     Column(
         modifier = modifier
             .background(color.copy(alpha = 0.22f))
-            .tvFocusable(RoundedCornerShape(18.dp), onClick)
-            .padding(14.dp)
+            .tvFocusable(RoundedCornerShape(16.dp), onClick)
+            .padding(10.dp)
     ) {
         Text(item.label, style = FamilyCalTypography.bodyMedium)
-        Text(if (days <= 0) "Today" else "$days", style = FamilyCalTypography.headlineLarge, color = color)
+        Text(if (days <= 0) "Today" else "$days", style = FamilyCalTypography.titleLarge, color = color)
         if (days > 0) Text("days", style = FamilyCalTypography.bodyMedium)
     }
 }
 
 @Composable
 private fun WeatherWeekStrip(forecast: List<DayForecast>) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(forecast) { f ->
-            Column(modifier = Modifier.width(104.dp).clip(RoundedCornerShape(14.dp)).background(HubSurfaceRaised).padding(10.dp)) {
+            Column(modifier = Modifier.width(84.dp).clip(RoundedCornerShape(12.dp)).background(HubSurfaceRaised).padding(6.dp)) {
                 Text(f.dayLabel, style = FamilyCalTypography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(4.dp))
-                Text(weatherEmoji(f.condition), style = FamilyCalTypography.bodyLarge)
-                Spacer(Modifier.height(4.dp))
-                Row { Text("${f.highF}\u00B0", style = FamilyCalTypography.bodyMedium); Spacer(Modifier.width(6.dp)); Text("${f.lowF}\u00B0", style = FamilyCalTypography.bodyMedium, color = HubTextSecondary) }
+                Spacer(Modifier.height(2.dp))
+                Text(weatherEmoji(f.condition), style = FamilyCalTypography.bodyMedium)
+                Spacer(Modifier.height(2.dp))
+                Row { Text("${f.highF}\u00B0", style = FamilyCalTypography.bodyMedium); Spacer(Modifier.width(4.dp)); Text("${f.lowF}\u00B0", style = FamilyCalTypography.bodyMedium, color = HubTextSecondary) }
             }
         }
-    }
-}
-
-@Composable
-private fun VoiceQuickAddBar(onMicPressed: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(HubSurface)
-            .tvFocusable(RoundedCornerShape(20.dp), onMicPressed)
-            .padding(horizontal = 18.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(modifier = Modifier.size(38.dp).clip(CircleShape).background(HubAccent), contentAlignment = Alignment.Center) { Text("\uD83C\uDF99\uFE0F") }
-        Spacer(Modifier.width(14.dp))
-        Text("Hold the mic button and say \u201CAdd soccer practice Saturday 10am for Emma\u201D", style = FamilyCalTypography.bodyMedium, modifier = Modifier.weight(1f))
     }
 }
 
@@ -365,4 +354,3 @@ fun weatherEmoji(condition: String): String = when (condition.lowercase()) {
     "snow" -> "\u2744\uFE0F"
     else -> "\u26C5"
 }
-

@@ -6,14 +6,8 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Query
-import java.text.SimpleDateFormat
 import java.util.*
 
-/**
- * Open-Meteo requires no API key and no account -- good fit for a hobby
- * family-TV project. Swap in a different provider here if you'd rather use
- * one you already have a key for (e.g. OpenWeatherMap).
- */
 data class OpenMeteoResponse(
     val daily: DailyBlock
 )
@@ -37,8 +31,6 @@ interface OpenMeteoApi {
     ): OpenMeteoResponse
 }
 
-// Open-Meteo's free geocoding service -- turns a typed city name ("Bradenton, FL")
-// into coordinates, no API key needed. Separate host from the forecast API.
 data class GeocodeResponse(val results: List<GeocodeResult>?)
 data class GeocodeResult(val name: String, val admin1: String?, val latitude: Double, val longitude: Double)
 
@@ -50,7 +42,6 @@ interface GeocodingApi {
     ): GeocodeResponse
 }
 
-/** Thrown when a typed city name doesn't match anything -- catch this to show the person a friendly message. */
 class CityNotFoundException(city: String) : Exception("Couldn't find a location matching \"$city\"")
 
 class WeatherRepository {
@@ -66,12 +57,14 @@ class WeatherRepository {
         .build()
         .create(GeocodingApi::class.java)
 
-    /**
-     * Looks up whatever the person typed (e.g. "Bradenton", "Bradenton, FL",
-     * "Bradenton, Florida") and returns the matched place name plus its
-     * forecast. Throws CityNotFoundException if nothing matches.
-     */
-   suspend fun getWeekForecast(lat: Double, lon: Double): List<DayForecast> {
+    suspend fun getWeekForecastForCity(cityQuery: String): Pair<String, List<DayForecast>> {
+        val geo = geocodingApi.search(cityQuery)
+        val match = geo.results?.firstOrNull() ?: throw CityNotFoundException(cityQuery)
+        val label = if (match.admin1 != null) "${match.name}, ${match.admin1}" else match.name
+        return label to getWeekForecast(match.latitude, match.longitude)
+    }
+
+    suspend fun getWeekForecast(lat: Double, lon: Double): List<DayForecast> {
         val resp = api.getWeeklyForecast(lat, lon)
         val dayFmt = java.time.format.DateTimeFormatter.ofPattern("EEE", Locale.US)
 
@@ -87,27 +80,6 @@ class WeatherRepository {
         }
     }
 
-    /** Pass exact lat/lon directly if you already have them. */
-    suspend fun getWeekForecast(lat: Double, lon: Double): List<DayForecast> {
-        val resp = api.getWeeklyForecast(lat, lon)
-        val dayFmt = SimpleDateFormat("EEE", Locale.US)
-        val dateFmt = SimpleDateFormat("MMM d", Locale.US)
-        val parseFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-
-        return resp.daily.time.indices.map { i ->
-            val date = parseFmt.parse(resp.daily.time[i]) ?: Date()
-            DayForecast(
-                dayLabel = if (i == 0) "Today" else dayFmt.format(date),
-                dateLabel = dateFmt.format(date),
-                highF = resp.daily.tempMax[i].toInt(),
-                lowF = resp.daily.tempMin[i].toInt(),
-                condition = mapWeatherCode(resp.daily.weatherCode[i])
-            )
-        }
-    }
-
-    // WMO weather codes -> our simplified condition strings (see
-    // https://open-meteo.com/en/docs for the full code table)
     private fun mapWeatherCode(code: Int): String = when (code) {
         0 -> "Sunny"
         1, 2 -> "Partly Cloudy"
